@@ -1,0 +1,75 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Movie Review API",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8080",
+      "description": "Local development server"
+    }
+  ],
+  "paths": {
+    "/wrk2-api/review/compose": {
+      "post": {
+        "summary": "Compose a new movie review",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "username": {
+                    "type": "string",
+                    "example": "username_123"
+                  },
+                  "password": {
+                    "type": "string",
+                    "example": "password_123"
+                  },
+                  "title": {
+                    "type": "string",
+                    "enum": [
+                      "Avengers%3A+Endgame",
+                      "Captain+Marvel",
+                      "Spider-Man%3A+Far+from+Home",
+                      "The+Lion+King",
+                      "Toy+Story+4",
+                      "Aladdin",
+                      "Joker",
+                      "Frozen+II",
+                      "Star+Wars%3A+The+Rise+of+Skywalker",
+                      "The+Irishman"
+                    ]
+                  },
+                  "rating": {
+                    "type": "integer",
+                    "format": "int32",
+                    "example": 9
+                  },
+                  "text": {
+                    "type": "string",
+                    "example": "An+epic+conclusion+to+the+Marvel+saga."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Review successfully created"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    }
+  }
+}
