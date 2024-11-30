@@ -1,0 +1,9 @@
+zss==1.2.0
+boto3==1.23.10
+seaborn==0.11.2
+clp-ffi-py==0.0.4
+clp-logging==0.0.11
+brokenaxes==0.6.1
+torch_geometric==2.5.3
+matplotlib==3.7.3
+docker==7.1.0
