@@ -104,7 +104,7 @@ Combines incident and baseline traces using configurable distribution parameters
 
 ### Comparing Traces
 
-PandoraTrace provides a robust comparison framework for analyzing baseline and synthetic traces using SQL queries and Wasserstein distance metrics.
+PandoraTrace provides a robust comparison framework for analyzing two traces (e.g. a baseline and a synthetic trace) using SQL queries and Wasserstein distance metrics.
 
 #### Basic Implementation
 
