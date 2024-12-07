@@ -7,7 +7,7 @@ python3 scripts/init_social_graph.py --graph=socfb-Reed98
 
 # restler
 cd restler-fuzzer && docker build -t restler .
-cd /Users/saart/cmu/GenT/src/paper/benchmark
+cd /the/benchmark/directory
 docker run -v .:/code/ -it --rm --name restler --network host restler
 # on the docker
 cd /code/socialNetwork

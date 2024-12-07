@@ -54,11 +54,13 @@ PandoraTrace enables programmatic generation and analysis of traces exhibiting s
 - Python 3.8+
 - pip (package installer)
 - Docker (for running microservices)
+- DeathStarBench repository
+- RESTler Docker image
 
 ### Installation
 
+1. Clone PandoraTrace repository:
 ```bash
-# Clone repository
 git clone https://github.com/saart/PandoraTrace.git
 cd PandoraTrace
 
@@ -69,6 +71,22 @@ source venv/bin/activate
 # Install dependencies
 pip install -r requirements.txt
 ```
+
+2. Clone and set up DeathStarBench:
+```bash
+git clone https://github.com/delimitrou/DeathStarBench.git
+```
+
+3. Clone and build RESTler Docker image:
+```bash
+# Clone RESTler repository
+git clone https://github.com/microsoft/restler-fuzzer.git
+
+# Build Docker image
+cd restler-fuzzer
+docker build -t restler .
+```
+Note: if you get an error during the docker build, follow the suggestion at: https://github.com/microsoft/restler-fuzzer/issues/901 (add `--break-system-packages` to the `pip install` command in the Dockerfile)
 
 ## Usage
 
@@ -83,13 +101,13 @@ The framework provides three main functionalities for trace generation:
 
 #### 1. Baseline Trace Creation
 ```bash
-python run_benchmark.py <app_name> --create_baseline
+python run_benchmark.py <app_name> --deathstar_dir /path/to/DeathStarBench --create_baseline
 ```
 Generates baseline traces without incident injection.
 
 #### 2. Incident Testing
 ```bash
-python run_benchmark.py <app_name> --run_test
+python run_benchmark.py <app_name> --deathstar_dir /path/to/DeathStarBench --run_test
 ```
 - Deploys specified microservice application
 - Injects configured incidents
@@ -98,9 +116,14 @@ python run_benchmark.py <app_name> --run_test
 
 #### 3. Trace Merging
 ```bash
-python run_benchmark.py <app_name> --prepare_traces [--lambda_values LAMBDA...]
+python run_benchmark.py <app_name> --deathstar_dir /path/to/DeathStarBench --prepare_traces [--lambda_values LAMBDA...] [--target_dir /path/to/output]
 ```
 Combines incident and baseline traces using configurable distribution parameters.
+
+Available applications (`<app_name>`):
+- socialNetwork
+- hotelReservation
+- mediaMicroservices
 
 ### Comparing Traces
 

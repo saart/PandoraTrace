@@ -6,21 +6,19 @@ import random
 import subprocess
 from contextlib import contextmanager
 from enum import Enum
+from pathlib import Path
 from time import sleep
 from typing import Set, NamedTuple, List, Literal
 
 import docker
 from docker.models.containers import Container
 
-from jaeger_to_gent import (download_traces_from_jaeger_for_all_services,
-                                                  translate_jaeger_to_gent,
-                                                  translate_jaeger_to_gent_from_list)
+from jaeger_to_gent import download_traces_from_jaeger_for_all_services
 
 FUZZLER_COMPILE_COMMAND = "/RESTler/restler/Restler compile --api_spec ./swagger.json"
 EXEC_FUZZ_LEAN_COMMAND = "/RESTler/restler/Restler fuzz-lean --grammar_file ./Compile/grammar.py --dictionary_file ./Compile/dict.json --settings ./Compile/engine_settings.json --no_ssl"
 
-BENCHMARK_DIR = "/Users/saart/cmu/GenT/src/paper/benchmark/data/restler"
-DEATHSTAR_DIR = "/Users/saart/cmu/DeathStarBench"
+BENCHMARK_DIR = str(Path(__file__).parent / "data" / "restler")
 SOCIAL_NETWORK_APP = "socialNetwork"
 
 
@@ -52,10 +50,14 @@ INCIDENTS: List[Incident] = [
 
 
 @contextmanager
-def setup_test(app: AppName):
+def setup_test(app: AppName, deathstar_dir: str):
     before_containers = set(docker.from_env().containers.list())
-    subprocess.check_output("docker-compose up -d --wait", cwd=f"{DEATHSTAR_DIR}/{app.value}",
+    subprocess.check_output("docker-compose up -d --wait", cwd=f"{deathstar_dir}/{app.value}",
                             shell=True, stderr=subprocess.STDOUT)
+    if app == AppName.socialNetwork:
+        result = subprocess.check_output("python3 scripts/init_social_graph.py --graph=socfb-Reed98",
+                                cwd=f"{deathstar_dir}/{app.value}", shell=True, stderr=subprocess.STDOUT)
+        print("init graph result:", result.decode())
     app_containers = set(docker.from_env().containers.list()) - before_containers
     restler_container: Container = docker.from_env().containers.run(
         "restler", stdin_open=True, tty=True, detach=True, network_mode="host", auto_remove=True,
@@ -68,7 +70,7 @@ def setup_test(app: AppName):
     finally:
         try:
             print("docker compose down...", end=" ", flush=True)
-            subprocess.check_output("docker-compose down", cwd=f"{DEATHSTAR_DIR}/{app.value}",
+            subprocess.check_output("docker-compose down -v", cwd=f"{deathstar_dir}/{app.value}",
                                     shell=True, stderr=subprocess.STDOUT)
             print("done")
         except Exception as e:
@@ -123,7 +125,7 @@ def run_restler(restler_container: Container):
     return [l for l in fuzz_lean.output.decode().splitlines() if "Attempted requests" in l][0]
 
 
-def run_test(app: AppName, incidents: List[Incident], target_count: int = 3000):
+def run_test(app: AppName, incidents: List[Incident], deathstar_dir: str, target_count: int = 3000):
     for incident in incidents:
         target_dir = f"data/{app.value}/{incident.incident_name}/raw_jaeger/"
         incident_traces = []
@@ -135,7 +137,7 @@ def run_test(app: AppName, incidents: List[Incident], target_count: int = 3000):
             continue
         else:
             print(f"Running incident {incident.incident_name}")
-        with setup_test(app) as (restler_container, app_containers):
+        with setup_test(app, deathstar_dir) as (restler_container, app_containers):
             add_chaos(app_containers, incident)
             for _ in range(15):
                 run_restler(restler_container)
@@ -148,13 +150,12 @@ def run_test(app: AppName, incidents: List[Incident], target_count: int = 3000):
                 print(f"Failed to collect enough traces for incident {incident.incident_name}")
 
 
-def create_baseline(app: AppName):
-    with setup_test(app) as (restler_container, app_containers):
+def create_baseline(app: AppName, deathstar_dir: str, target_dir: str):
+    with setup_test(app, deathstar_dir) as (restler_container, app_containers):
         for i in range(100):
             run_restler(restler_container)
-            traces = download_traces_from_jaeger_for_all_services(target_dir=f"data/{app.value}/baseline/raw_jaeger/")
+            traces = download_traces_from_jaeger_for_all_services(target_dir=f"{target_dir}/{app.value}/baseline/raw_jaeger/")
             print(f"Baseline collected {traces} traces in the {i}th iteration")
-    translate_jaeger_to_gent(from_dir=f"data/{app.value}/baseline/raw_jaeger/")
 
 
 def merge_with_exp(benign_traces: List[dict], incident_traces: List[dict], exp_lambda: float) -> List[dict]:
@@ -177,7 +178,7 @@ def merge_with_exp(benign_traces: List[dict], incident_traces: List[dict], exp_l
     return merged_traces
 
 
-def prepare_merged_traces(app: AppName, incident: Incident, exp_lambda: float):
+def prepare_merged_traces(app: AppName, incident: Incident, exp_lambda: float, target_dir_base: str):
     incident_traces = []
     incident_dir = f"data/{app.value}/{incident.incident_name}/raw_jaeger"
     if not os.path.exists(incident_dir):
@@ -191,13 +192,12 @@ def prepare_merged_traces(app: AppName, incident: Incident, exp_lambda: float):
 
     merged_traces = merge_with_exp(benign_traces, incident_traces, exp_lambda)
 
-    target_dir = f"/Users/saart/cmu/GenT/traces/{app.value}_{incident.incident_name}_{exp_lambda}"
+    target_dir = os.path.join(target_dir_base, f"{app.value}_{incident.incident_name}_{exp_lambda}")
     os.makedirs(target_dir, exist_ok=True)
-    translate_jaeger_to_gent_from_list(merged_traces, f"{target_dir}/txs.json")
+    json.dump(merged_traces, open(f"{target_dir}/txs.json", "w"), indent=4)
 
 
 def main():
-    # Set up argument parsing
     parser = argparse.ArgumentParser(description="PandoraTrace Benchmark")
 
     parser.add_argument(
@@ -205,6 +205,13 @@ def main():
         type=str,
         choices=[app.value for app in AppName],
         help="Specify the application to run the benchmark on"
+    )
+
+    parser.add_argument(
+        "--deathstar_dir",
+        type=str,
+        required=True,
+        help="Path to the DeathStarBench directory"
     )
 
     parser.add_argument(
@@ -233,20 +240,27 @@ def main():
         help="List of lambda values for preparing merged traces"
     )
 
+    parser.add_argument(
+        "--target_dir",
+        type=str,
+        default=str(os.path.join(__file__, "traces")),
+        help="Target directory for storing merged traces"
+    )
+
     args = parser.parse_args()
 
     app = AppName(args.app_name)
 
     if args.create_baseline:
-        create_baseline(app)
+        create_baseline(app, args.deathstar_dir, args.target_dir)
 
     if args.run_test:
-        run_test(app, INCIDENTS)
+        run_test(app, INCIDENTS, args.deathstar_dir)
 
     if args.prepare_traces:
         for incident in INCIDENTS:
             for exp_lambda in args.lambda_values:
-                prepare_merged_traces(app, incident, exp_lambda)
+                prepare_merged_traces(app, incident, exp_lambda, args.target_dir)
 
 
 if __name__ == "__main__":
