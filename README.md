@@ -97,7 +97,10 @@ PandoraTrace operates in two primary modes:
 
 ### Creating Raw Traces
 
-The framework provides three main functionalities for trace generation:
+The framework provides three main functionalities for trace generation. From the PandoraTrace main directory:
+```bash
+cd src/pandora_trace
+```
 
 #### 1. Baseline Trace Creation
 ```bash
