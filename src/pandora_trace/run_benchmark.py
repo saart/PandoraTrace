@@ -125,7 +125,7 @@ def run_restler(restler_container: Container):
     return [l for l in fuzz_lean.output.decode().splitlines() if "Attempted requests" in l][0]
 
 
-def run_test(app: AppName, incidents: List[Incident], deathstar_dir: str, target_count: int = 3000):
+def run_test(app: AppName, incidents: List[Incident], deathstar_dir: str, target_count: int):
     for incident in incidents:
         target_dir = f"data/{app.value}/{incident.incident_name}/raw_jaeger/"
         incident_traces = []
@@ -150,12 +150,17 @@ def run_test(app: AppName, incidents: List[Incident], deathstar_dir: str, target
                 print(f"Failed to collect enough traces for incident {incident.incident_name}")
 
 
-def create_baseline(app: AppName, deathstar_dir: str, target_dir: str):
+def create_baseline(app: AppName, deathstar_dir: str, target_dir: str, target_count: int):
+    generated = 0
     with setup_test(app, deathstar_dir) as (restler_container, app_containers):
         for i in range(100):
             run_restler(restler_container)
             traces = download_traces_from_jaeger_for_all_services(target_dir=f"{target_dir}/{app.value}/baseline/raw_jaeger/")
             print(f"Baseline collected {traces} traces in the {i}th iteration")
+            generated += traces
+            if generated >= target_count:
+                break
+    print(f"Collected {generated} baseline traces to {target_dir}/{app.value}/baseline/raw_jaeger/")
 
 
 def merge_with_exp(benign_traces: List[dict], incident_traces: List[dict], exp_lambda: float) -> List[dict]:
@@ -243,8 +248,15 @@ def main():
     parser.add_argument(
         "--target_dir",
         type=str,
-        default=str(os.path.join(__file__, "traces")),
+        default=str(Path(__file__).parent / "traces"),
         help="Target directory for storing merged traces"
+    )
+
+    parser.add_argument(
+        "--num_traces",
+        type=int,
+        default=10_000,
+        help="Target minimum number of traces that should be collected. Default is 10,000"
     )
 
     args = parser.parse_args()
@@ -252,10 +264,10 @@ def main():
     app = AppName(args.app_name)
 
     if args.create_baseline:
-        create_baseline(app, args.deathstar_dir, args.target_dir)
+        create_baseline(app, args.deathstar_dir, args.target_dir, target_count=args.num_traces)
 
     if args.run_test:
-        run_test(app, INCIDENTS, args.deathstar_dir)
+        run_test(app, INCIDENTS, args.deathstar_dir, target_count=args.num_traces)
 
     if args.prepare_traces:
         for incident in INCIDENTS:

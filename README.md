@@ -36,9 +36,6 @@ PandoraTrace enables programmatic generation and analysis of traces exhibiting s
      - Service delays
      - Internal errors
      - Resource constraints
-   - Utilizes system tools:
-     - `stress` package for CPU/memory simulation
-     - `iproute2` for network latency injection
 
 4. **Query Templates**
    - Implements 10 standardized queries
@@ -108,6 +105,9 @@ python run_benchmark.py <app_name> --deathstar_dir /path/to/DeathStarBench --cre
 ```
 Generates baseline traces without incident injection.
 
+Optional parameters:
+- `--num_traces`: Minimum number of traces to generate (default: 10,000).
+
 #### 2. Incident Testing
 ```bash
 python run_benchmark.py <app_name> --deathstar_dir /path/to/DeathStarBench --run_test
@@ -116,6 +116,9 @@ python run_benchmark.py <app_name> --deathstar_dir /path/to/DeathStarBench --run
 - Injects configured incidents
 - Generates traffic via RESTler
 - Captures and converts Jaeger traces
+
+Optional parameters:
+- `--num_traces`: Minimum number of traces to generate (default: 10,000).
 
 #### 3. Trace Merging
 ```bash
@@ -234,6 +237,25 @@ We welcome community contributions to PandoraTrace. Please follow these steps:
 ## License
 
 This project is distributed under the MIT License. See the [LICENSE](LICENSE) file for details.
+
+
+## Troubleshooting
+
+### No traces collected
+If you encounter the following error:
+```
+Baseline collected 0 traces in the <i>th iteration
+```
+Please follow the suggestion in https://github.com/delimitrou/DeathStarBench/issues/351 to downgrade the version of jaeger.
+
+Specifically, in the file `<DeathStarBench_dir>/<app>/docker-compose.yml`, change the line from:
+```
+image: jaegertracing/all-in-one:latest
+```
+to
+```
+image: jaegertracing/all-in-one:1.62.0
+```
 
 ## References
 
