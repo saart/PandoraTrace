@@ -244,7 +244,7 @@ Baseline collected 0 traces in the <i>th iteration
 ```
 Please follow the suggestion in https://github.com/delimitrou/DeathStarBench/issues/351 to downgrade the version of jaeger.
 
-Specifically, in the file `<deatchstar_dir>/<app>/docker-compose.yml`, change the line from:
+Specifically, in the file `<DeathStarBench_dir>/<app>/docker-compose.yml`, change the line from:
 ```
 image: jaegertracing/all-in-one:latest
 ```
