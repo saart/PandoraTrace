@@ -4,6 +4,7 @@ import math
 import os
 import random
 import subprocess
+import time
 from contextlib import contextmanager
 from enum import Enum
 from pathlib import Path
@@ -57,7 +58,7 @@ def setup_test(app: AppName, deathstar_dir: str):
     if app == AppName.socialNetwork:
         result = subprocess.check_output("python3 scripts/init_social_graph.py --graph=socfb-Reed98",
                                 cwd=f"{deathstar_dir}/{app.value}", shell=True, stderr=subprocess.STDOUT)
-        print("init graph result:", result.decode())
+        print("init graph result:", result.decode().splitlines()[-1])
     app_containers = set(docker.from_env().containers.list()) - before_containers
     restler_container: Container = docker.from_env().containers.run(
         "restler", stdin_open=True, tty=True, detach=True, network_mode="host", auto_remove=True,
@@ -89,7 +90,19 @@ def print_result(app: str):
             print(f.read())
 
 
+def wait_for_container(container: Container, timeout: int = 60) -> bool:
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        container.reload()  # Refresh container state
+        if container.status == 'running':
+            return True
+        sleep(1)
+    return False
+
+
 def run(container: Container, cmd: str, **kwargs):
+    if not wait_for_container(container):
+        raise Exception(f"Container failed to enter running state within timeout. Could not execute command {cmd}.")
     for i in range(5):
         try:
             res = container.exec_run(cmd, privileged=True, user='root', **kwargs)
@@ -97,9 +110,9 @@ def run(container: Container, cmd: str, **kwargs):
                 return res
             raise Exception(f"Exit status {res}, output: {res.output[:100]}")
         except Exception as e:
-            print(f"Failed to add chaos (attempt {i}/5)", e)
+            if i == 4:
+                raise e
             sleep(5)
-    raise Exception(f"Failed to execute command {cmd}")
 
 
 def add_chaos(app_containers: Set[Container], incident: Incident):
@@ -116,7 +129,10 @@ def add_chaos(app_containers: Set[Container], incident: Incident):
             else:
                 run(container, incident.command, tty=True, demux=False, detach=True)
         except Exception as e:
-            print(f"Could not add incident {incident.incident_name} to container {container.name} due to {e}")
+            if '"apt": executable file not found' in str(e):
+                continue
+            else:
+                print(f"Skip adding incident {incident.incident_name} to container {container.name} due to {e}")
     print()
 
 
@@ -126,6 +142,7 @@ def run_restler(restler_container: Container):
 
 
 def run_test(app: AppName, incidents: List[Incident], deathstar_dir: str, target_count: int):
+    target_count = target_count or 3_000
     for incident in incidents:
         target_dir = f"data/{app.value}/{incident.incident_name}/raw_jaeger/"
         incident_traces = []
@@ -139,7 +156,7 @@ def run_test(app: AppName, incidents: List[Incident], deathstar_dir: str, target
             print(f"Running incident {incident.incident_name}")
         with setup_test(app, deathstar_dir) as (restler_container, app_containers):
             add_chaos(app_containers, incident)
-            for _ in range(15):
+            for _ in range(50):
                 run_restler(restler_container)
                 traces = download_traces_from_jaeger_for_all_services(target_dir=target_dir)
                 if traces > target_count:
@@ -151,6 +168,7 @@ def run_test(app: AppName, incidents: List[Incident], deathstar_dir: str, target
 
 
 def create_baseline(app: AppName, deathstar_dir: str, target_dir: str, target_count: int):
+    target_count = target_count or 10_000
     generated = 0
     with setup_test(app, deathstar_dir) as (restler_container, app_containers):
         for i in range(100):
@@ -255,8 +273,8 @@ def main():
     parser.add_argument(
         "--num_traces",
         type=int,
-        default=10_000,
-        help="Target minimum number of traces that should be collected. Default is 10,000"
+        default=0,
+        help="Target minimum number of traces that should be collected. Default is 10,000 for baseline and 3,000 for incidents"
     )
 
     args = parser.parse_args()
