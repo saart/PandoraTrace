@@ -137,17 +137,47 @@ Combines incident and benign traces using an exponential distribution to simulat
 Multiple lambda values can be provided to generate different incident frequency scenarios.
 
 
-### Comparing Traces
+## Comparing Traces
 
 PandoraTrace provides a robust comparison framework for analyzing two traces (e.g. a baseline and a synthetic trace) using SQL queries and Wasserstein distance metrics.
 
-#### Basic Implementation
+Before running comparisons, you need to have a SQLite database containing your traces. The database should have tables for both synthetic and baseline traces with the following schema:
+
+Required columns:
+- `traceId`: Unique identifier for each trace
+- `spanId`: Unique identifier for each span within a trace
+- `parentId`: Reference to parent span's ID
+- `serviceName`: Name of the service that generated the span
+- `startTime`: Timestamp when the span started
+- `endTime`: Timestamp when the span ended
+- `status`: Status code (0 for success, 1 for error)
+
+Optional columns can include additional attributes you want to analyze.
+
+
+Example table structure:
+```sql
+CREATE TABLE traces (
+    traceId TEXT,
+    spanId TEXT,
+    parentId TEXT,
+    serviceName TEXT,
+    startTime INTEGER,
+    endTime INTEGER,
+    status INTEGER,
+    -- Additional attributes can be added here
+    PRIMARY KEY (traceId, spanId)
+);
+```
+
+### Basic Implementation
 
 ```python
 import sqlite3
 from comparison import TraceComparator
 
 # Initialize database connection
+# Note: You need to create this database first with your trace data
 conn = sqlite3.connect("traces.db")
 comparator = TraceComparator(conn)
 
