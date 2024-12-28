@@ -1,5 +1,6 @@
 import json
 import os
+from pathlib import Path
 from typing import Optional, List
 
 import requests
@@ -8,7 +9,7 @@ JAEGER_URL = "http://localhost:16686"
 APP = "hotelReservation"
 
 
-def download_traces_from_jaeger(service_name: str, jaeger_url: str, target_dir: str) -> int:
+def download_traces_from_jaeger(service_name: str, jaeger_url: str, target_dir: Path) -> int:
     response = requests.get(f"{jaeger_url}/api/traces?service={service_name}&limit=10000").json()
     traces = []
     for trace in response["data"]:
@@ -16,14 +17,14 @@ def download_traces_from_jaeger(service_name: str, jaeger_url: str, target_dir: 
         response = requests.get(f"{jaeger_url}/api/traces/{trace_id}").json()
         traces.extend(response["data"])
     os.makedirs(target_dir, exist_ok=True)
-    target_file = os.path.join(target_dir, f"{service_name}.json")
+    target_file = target_dir / f"{service_name}.json"
     with open(target_file, "w") as f:
         json.dump(traces, f, indent=4)
     # print(f"Downloaded {len(traces)} traces for {service_name} to {target_file}.")
     return len(traces)
 
 
-def download_traces_from_jaeger_for_all_services(target_dir: str, jaeger_url: str = JAEGER_URL) -> int:
+def download_traces_from_jaeger_for_all_services(target_dir: Path, jaeger_url: str = JAEGER_URL) -> int:
     response = requests.get(f"{jaeger_url}/api/services")
     total = 0
     all_services = response.json()["data"] or []

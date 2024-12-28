@@ -98,16 +98,22 @@ The framework provides three main functionalities for trace generation:
 
 #### 1. Baseline Trace Creation
 ```bash
-python run_benchmark.py <app_name> --deathstar_dir /path/to/DeathStarBench --create_baseline
+python run_benchmark.py <app_name> --deathstar_dir /path/to/DeathStarBench --create_baseline [--working_dir /path/to/output]
 ```
 Generates baseline traces without incident injection.
 
 Optional parameters:
 - `--num_traces`: Minimum number of traces to generate (default: 10,000).
 
+Available applications (`<app_name>`):
+- socialNetwork
+- hotelReservation
+- mediaMicroservices
+
+
 #### 2. Incident Testing
 ```bash
-python run_benchmark.py <app_name> --deathstar_dir /path/to/DeathStarBench --run_test
+python run_benchmark.py <app_name> --deathstar_dir /path/to/DeathStarBench --run_test [--working_dir /path/to/output]
 ```
 - Deploys specified microservice application
 - Injects configured incidents
@@ -119,14 +125,17 @@ Optional parameters:
 
 #### 3. Trace Merging
 ```bash
-python run_benchmark.py <app_name> --deathstar_dir /path/to/DeathStarBench --prepare_traces [--lambda_values LAMBDA...] [--target_dir /path/to/output]
+python run_benchmark.py <app_name> --deathstar_dir /path/to/DeathStarBench --prepare_traces [--lambda_values LAMBDA...] [--working_dir /path/to/output]
 ```
-Combines incident and baseline traces using configurable distribution parameters.
+Combines incident and benign traces using an exponential distribution to simulate realistic incident occurrence patterns. The --lambda_values parameter controls the frequency of incidents:
 
-Available applications (`<app_name>`):
-- socialNetwork
-- hotelReservation
-- mediaMicroservices
+- Each lambda ($\lambda$) represents the rate parameter of an exponential distribution
+- Higher λ values result in more frequent incidents (e.g., λ=0.2 averages one incident every 5 traces)
+- Lower λ values result in more spread out incidents (e.g., λ=0.001 averages one incident every 1000 traces)
+- Default values: [0.2, 0.1, 0.05, 0.02, 0.01, 0.005, 0.002, 0.001]
+
+Multiple lambda values can be provided to generate different incident frequency scenarios.
+
 
 ### Comparing Traces
 

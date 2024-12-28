@@ -68,6 +68,9 @@ def setup_test(app: AppName, deathstar_dir: str):
     restler_container.exec_run(FUZZLER_COMPILE_COMMAND)
     try:
         yield restler_container, app_containers
+    except KeyboardInterrupt:
+        print("\n\n############\nInterrupted. Killing app and fuzzler\n############\n\n")
+        raise
     finally:
         try:
             print("docker compose down...", end=" ", flush=True)
@@ -141,10 +144,21 @@ def run_restler(restler_container: Container):
     return [l for l in fuzz_lean.output.decode().splitlines() if "Attempted requests" in l][0]
 
 
-def run_test(app: AppName, incidents: List[Incident], deathstar_dir: str, target_count: int):
-    target_count = target_count or 3_000
+def get_baseline_traces_path(app: AppName, working_directory: Path) -> Path:
+    return working_directory / app.value / "baseline" / "raw_jaeger"
+
+
+def get_incident_traces_path(app: AppName, incident: Incident, working_directory: Path) -> Path:
+    return working_directory / app.value / incident.incident_name / "raw_jaeger"
+
+
+def get_merged_traces_base_path(working_directory: Path) -> Path:
+    return working_directory / "merged_traces"
+
+
+def run_test(app: AppName, incidents: List[Incident], deathstar_dir: str, target_count: int, working_directory: Path):
     for incident in incidents:
-        target_dir = f"data/{app.value}/{incident.incident_name}/raw_jaeger/"
+        target_dir = get_incident_traces_path(app, incident, working_directory)
         incident_traces = []
         if os.path.exists(target_dir):
             for f in os.listdir(target_dir):
@@ -167,30 +181,30 @@ def run_test(app: AppName, incidents: List[Incident], deathstar_dir: str, target
                 print(f"Failed to collect enough traces for incident {incident.incident_name}")
 
 
-def create_baseline(app: AppName, deathstar_dir: str, target_dir: str, target_count: int):
-    target_count = target_count or 10_000
+def create_baseline(app: AppName, deathstar_dir: str, target_count: int, working_directory: Path):
     generated = 0
+    target_dir = get_baseline_traces_path(app, working_directory)
     with setup_test(app, deathstar_dir) as (restler_container, app_containers):
         for i in range(100):
             run_restler(restler_container)
-            traces = download_traces_from_jaeger_for_all_services(target_dir=f"{target_dir}/{app.value}/baseline/raw_jaeger/")
+            traces = download_traces_from_jaeger_for_all_services(target_dir=target_dir)
             print(f"Baseline collected {traces} traces in the {i}th iteration")
             generated += traces
             if generated >= target_count:
                 break
-    print(f"Collected {generated} baseline traces to {target_dir}/{app.value}/baseline/raw_jaeger/")
+    print(f"Collected {generated} baseline traces to {target_dir}")
 
 
-def merge_with_exp(benign_traces: List[dict], incident_traces: List[dict], exp_lambda: float) -> List[dict]:
+def merge_with_exp(benign_traces: List[dict], incident_traces: List[dict], exp_lambda: float, target_count: int) -> List[dict]:
     merged_traces = []
     time_until_next_incident = random.expovariate(exp_lambda)
 
     for trace in benign_traces:
         if time_until_next_incident <= 0:
             if not incident_traces:
-                if len(merged_traces) > 10_000:
+                if len(merged_traces) > target_count:
                     break
-                raise Exception(f"Ran out of incidents after {len(merged_traces)} / 10000. Shouldn't happen. "
+                raise Exception(f"Ran out of incidents after {len(merged_traces)} / {target_count}. Shouldn't happen. "
                                 f"Create more incidents.")
             merged_traces.append(incident_traces.pop())
             time_until_next_incident = random.expovariate(exp_lambda)
@@ -201,21 +215,22 @@ def merge_with_exp(benign_traces: List[dict], incident_traces: List[dict], exp_l
     return merged_traces
 
 
-def prepare_merged_traces(app: AppName, incident: Incident, exp_lambda: float, target_dir_base: str):
+def prepare_merged_traces(app: AppName, incident: Incident, exp_lambda: float, target_count: int, working_directory: Path):
     incident_traces = []
-    incident_dir = f"data/{app.value}/{incident.incident_name}/raw_jaeger"
+    incident_dir = get_incident_traces_path(app, incident, working_directory)
     if not os.path.exists(incident_dir):
-        print(f"Skipping incident {incident.incident_name}")
+        print(f"Skipping incident {incident.incident_name} as it does not have traces")
         return
+    print(f"Preparing merged traces for incident {incident.incident_name} with lambda {exp_lambda}")
     for f in os.listdir(incident_dir):
         incident_traces.extend(json.load(open(os.path.join(incident_dir, f))))
 
-    benign_dir = f"data/{app.value}/baseline/raw_jaeger"
+    benign_dir = get_baseline_traces_path(app, working_directory)
     benign_traces = sum((json.load(open(os.path.join(benign_dir, f))) for f in os.listdir(benign_dir)), [])
 
-    merged_traces = merge_with_exp(benign_traces, incident_traces, exp_lambda)
+    merged_traces = merge_with_exp(benign_traces, incident_traces, exp_lambda, target_count=target_count)
 
-    target_dir = os.path.join(target_dir_base, f"{app.value}_{incident.incident_name}_{exp_lambda}")
+    target_dir = get_merged_traces_base_path(working_directory) / f"{app.value}_{incident.incident_name}_{exp_lambda}"
     os.makedirs(target_dir, exist_ok=True)
     json.dump(merged_traces, open(f"{target_dir}/txs.json", "w"), indent=4)
 
@@ -264,33 +279,35 @@ def main():
     )
 
     parser.add_argument(
-        "--target_dir",
+        "--working_dir",
         type=str,
         default=str(Path(__file__).parent / "traces"),
-        help="Target directory for storing merged traces"
+        help="Target working directory for PandoraTrace benchmark"
     )
 
     parser.add_argument(
         "--num_traces",
         type=int,
         default=0,
-        help="Target minimum number of traces that should be collected. Default is 10,000 for baseline and 3,000 for incidents"
+        help="Target minimum number of traces that should be collected. Default is 10,000 for baseline, 3,000 for incidents, and 3,000 for merged traces"
     )
 
     args = parser.parse_args()
 
     app = AppName(args.app_name)
+    working_directory = Path(args.working_dir)
 
     if args.create_baseline:
-        create_baseline(app, args.deathstar_dir, args.target_dir, target_count=args.num_traces)
+        create_baseline(app, args.deathstar_dir, target_count=args.num_traces or 10_000, working_directory=working_directory)
 
     if args.run_test:
-        run_test(app, INCIDENTS, args.deathstar_dir, target_count=args.num_traces)
+        run_test(app, INCIDENTS, args.deathstar_dir, target_count=args.num_traces or 3_000, working_directory=working_directory)
 
     if args.prepare_traces:
         for incident in INCIDENTS:
             for exp_lambda in args.lambda_values:
-                prepare_merged_traces(app, incident, exp_lambda, args.target_dir)
+                prepare_merged_traces(app, incident, exp_lambda, target_count=args.num_traces or 3_000, working_directory=working_directory)
+        print(f"Traces has been prepared to directory {get_merged_traces_base_path(working_directory)}")
 
 
 if __name__ == "__main__":
