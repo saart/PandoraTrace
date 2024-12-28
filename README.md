@@ -94,7 +94,10 @@ PandoraTrace operates in two primary modes:
 
 ### Creating Raw Traces
 
-The framework provides three main functionalities for trace generation:
+The framework provides three main functionalities for trace generation. From the PandoraTrace main directory:
+```bash
+cd src/pandora_trace
+```
 
 #### 1. Baseline Trace Creation
 ```bash
@@ -274,6 +277,7 @@ We welcome community contributions to PandoraTrace. Please follow these steps:
 
 This project is distributed under the MIT License. See the [LICENSE](LICENSE) file for details.
 
+
 ## Troubleshooting
 
 ### No traces collected
@@ -291,3 +295,14 @@ to
 ```
 image: jaegertracing/all-in-one:1.62.0
 ```
+
+## References
+
+If you use this code in a publication, please cite the following work: 
+
+@inproceedings{tochner2023gen,\
+    title={Gen-T: Reduce Distributed Tracing Operational Costs Using Generative Models},\  
+    author={Tochner, Saar and Fanti, Giulia and Sekar, Vyas},\
+    booktitle={Temporal Graph Learning Workshop@ NeurIPS 2023},\
+    year={2023}\
+}
